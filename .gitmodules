@@ -1,0 +1,4 @@
+[submodule "axi_s_to_fifos"]
+	path = axi_s_to_fifos
+	url = https://github.com/rodrigoolmos/axi_s_to_fifos.git
+	branch = main
