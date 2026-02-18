@@ -45,7 +45,7 @@ module spi_physical(
                 IDLE: begin
                     rst_cnts <= 1;
                     if (ena) begin
-                        state_spi <= delay_byte ? WAITING : LOAD_BYTE;
+                        state_spi <= (delay_byte && (n_delay_byte != 0)) ? WAITING : LOAD_BYTE;
                     end
                 end
                 LOAD_BYTE: begin
@@ -65,12 +65,13 @@ module spi_physical(
 
                     if (end_operating) begin
                         rst_cnts <= 1;
-                        state_spi <= delay_byte ? WAITING : LOAD_BYTE;
+                        state_spi <= (delay_byte && (n_delay_byte != 0)) ? WAITING : LOAD_BYTE;
                     end
                 end
                 WAITING: begin
-                    rst_cnts <= 0;
-                    if (bits_send_cnt == n_delay_byte) begin
+                    if (rst_cnts) begin
+                        rst_cnts <= 0;
+                    end else if (bits_send_cnt == n_delay_byte) begin
                         rst_cnts <= 1;
                         state_spi <= LOAD_BYTE;
                     end
@@ -112,7 +113,9 @@ module spi_physical(
                             && bits_send_cnt != 0 && state_spi == OPERATING;
     assign end_clk_cnt = (clk_div_cnt == clk_div);
     assign spi_clk = cpol ^ ((clk_div_cnt > (clk_div >> 1)) && (state_spi == OPERATING));
-    assign end_operating = (bits_send_cnt == 8) && clk_div_cnt == (clk_div >> 1)-1;
+    assign end_operating = (state_spi == OPERATING) &&
+                            (bits_send_cnt == 8) &&
+                            (clk_div_cnt == ((clk_div >> 1) - 1));
     assign spi_mosi = (state_spi == OPERATING) ? (msb_first ? data_in_ff[7] : data_in_ff[0]) : 1'b0;
     assign spi_cs_n = (state_spi == IDLE) ? 1 : 0;
     assign system_idle = (state_spi == IDLE);

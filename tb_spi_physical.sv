@@ -1,4 +1,4 @@
-`timescale 1us/1ns
+`timescale 1ns/1ps
 `include "agent_spi_slave.sv"
 
 module tb_spi_physical;
@@ -21,6 +21,14 @@ module tb_spi_physical;
     logic [7:0]  data_out;
 
     spi_if spi_if();
+
+    logic        active_frame;
+
+    assign spi_if.clk = clk;
+    assign spi_if.nrst = nrst;
+    assign spi_if.cpha = cpha;
+    assign spi_if.cpol = cpol;
+    assign spi_if.active_frame = active_frame;
 
     spi_slave spi_slave_inst;
 
@@ -95,8 +103,11 @@ module tb_spi_physical;
 
         // Test master sending
         fork
+            active_frame = 1;
             master_send(data_o);
             spi_slave_inst.read();
+            spi_slave_inst.frame_assertions(data_o.size());
+            active_frame = 0;
         join
 
         @(posedge clk iff system_idle);
@@ -104,8 +115,11 @@ module tb_spi_physical;
 
         // Test master receiving
         fork
+            active_frame = 1;
             spi_slave_inst.write();
             master_recv(data_i);
+            spi_slave_inst.frame_assertions(data_i.size());
+            active_frame = 0;
         join
 
         // check integrity of received
@@ -140,12 +154,12 @@ module tb_spi_physical;
         spi_slave_inst = new(spi_if);
         spi_slave_inst.reset_if();
         data_in = 0;
-        #111;
+        #100 @(posedge clk);
         nrst = 1;
     end
 
     
-    int n_tests = 5;
+    int n_tests = 50;
     initial begin
         // Wait for reset deassertion
         @(posedge nrst);
@@ -167,6 +181,8 @@ module tb_spi_physical;
                         spi_cfg.cpol, spi_cfg.cpha, spi_cfg.clk_div);
     
             configure_spi(spi_cfg);
+            #1000 @(posedge clk);
+
             test_write_read($urandom_range(1, 20));
         end
 
