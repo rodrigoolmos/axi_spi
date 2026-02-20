@@ -1,3 +1,12 @@
+typedef struct packed {
+    logic        msb_first;
+    logic        delay_byte;
+    logic [7:0]  n_delay_byte;
+    logic        cpol;
+    logic        cpha;
+    logic [23:0] clk_div;
+} spi_cfg_t;
+
 interface spi_if;
     
     logic clk;
@@ -6,27 +15,27 @@ interface spi_if;
     logic mosi;
     logic miso;
     logic cs_n;
-    logic cpha;
-    logic cpol;
+    spi_cfg_t spi_cfg;
     logic active_frame;
 
     property scl_while_cs_n_low; //clk>>sclk
         @(posedge clk) disable iff (!nrst)
-            ($rose(sclk) || $fell(sclk)) && !($rose(cpol) || $fell(cpol)) |-> !cs_n;
+            ($rose(sclk) || $fell(sclk)) && 
+            !($rose(spi_cfg.cpol) || $fell(spi_cfg.cpol)) |-> !cs_n;
     endproperty
     assert property (scl_while_cs_n_low) 
         else $error("SPI clock toggled while CS_N was high");
 
     property sclk_idle_matches_cpol_when_cs_high;
         @(posedge clk) disable iff (!nrst)
-            cs_n |-> cpol == sclk;
+            cs_n |-> spi_cfg.cpol == sclk;
     endproperty
     assert property (sclk_idle_matches_cpol_when_cs_high)
         else $error("SPI clock polarity mismatch while CS_N was high");
 
     property no_x_during_transfer;
         @(posedge clk) disable iff (!nrst)
-            (!cs_n) |-> !$isunknown({sclk, mosi, miso, cpol, cpha, cs_n});
+            (!cs_n) |-> !$isunknown({sclk, mosi, miso, spi_cfg.cpol, spi_cfg.cpha, cs_n});
     endproperty
     assert property (no_x_during_transfer)
         else $error("X/Z detected on SPI signals while CS_N low");
@@ -43,8 +52,8 @@ interface spi_if;
 
     sequence sample_edge;
         (!cs_n) && (
-            ( $rose(sclk) && ~(cpha ^ cpol) ) ||
-            ( $fell(sclk) &&  (cpha ^ cpol) )
+            ( $rose(sclk) && ~(spi_cfg.cpha ^ spi_cfg.cpol) ) ||
+            ( $fell(sclk) &&  (spi_cfg.cpha ^ spi_cfg.cpol) )
         );
     endsequence
 
@@ -58,8 +67,8 @@ interface spi_if;
     property no_sample_edge_after_mosi_change;
     @(posedge clk) disable iff (!nrst)
         $past($changed(mosi), 1) |-> !(
-        ( ($rose(sclk) && ~(cpha ^ cpol)) ||
-            ($fell(sclk) &&  (cpha ^ cpol)) )
+        ( ($rose(sclk) && ~(spi_cfg.cpha ^ spi_cfg.cpol)) ||
+            ($fell(sclk) &&  (spi_cfg.cpha ^ spi_cfg.cpol)) )
         );
     endproperty
 
@@ -69,21 +78,112 @@ interface spi_if;
 
     property mode_static_during_transfer;
         @(posedge clk) disable iff(!nrst)
-            (!cs_n) |-> (!$changed(cpol) && !$changed(cpha));
+            (!cs_n) |-> (!$changed(spi_cfg.cpol) && !$changed(spi_cfg.cpha));
     endproperty
     assert property(mode_static_during_transfer)
         else $error("SPI mode (CPOL/CPHA) changed during transfer");
 
-endinterface
 
-typedef struct packed {
-    logic        msb_first;
-    logic        delay_byte;
-    logic [7:0]  n_delay_byte;
-    logic        cpol;
-    logic        cpha;
-    logic [23:0] clk_div;
-} spi_cfg_t;
+    cpha_1: cover property (
+        @(posedge clk) disable iff (!nrst)
+            (spi_cfg.cpha == 1));
+
+    // Config coverage (manual cross for control bits)
+    cfg_m0_d0_p0_h0: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 0) && (spi_cfg.delay_byte == 0) &&
+        (spi_cfg.cpol == 0) && (spi_cfg.cpha == 0));
+    cfg_m0_d0_p0_h1: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 0) && (spi_cfg.delay_byte == 0) &&
+        (spi_cfg.cpol == 0) && (spi_cfg.cpha == 1));
+    cfg_m0_d0_p1_h0: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 0) && (spi_cfg.delay_byte == 0) &&
+        (spi_cfg.cpol == 1) && (spi_cfg.cpha == 0));
+    cfg_m0_d0_p1_h1: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 0) && (spi_cfg.delay_byte == 0) &&
+        (spi_cfg.cpol == 1) && (spi_cfg.cpha == 1));
+
+    cfg_m0_d1_p0_h0: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 0) && (spi_cfg.delay_byte == 1) &&
+        (spi_cfg.cpol == 0) && (spi_cfg.cpha == 0));
+    cfg_m0_d1_p0_h1: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 0) && (spi_cfg.delay_byte == 1) &&
+        (spi_cfg.cpol == 0) && (spi_cfg.cpha == 1));
+    cfg_m0_d1_p1_h0: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 0) && (spi_cfg.delay_byte == 1) &&
+        (spi_cfg.cpol == 1) && (spi_cfg.cpha == 0));
+    cfg_m0_d1_p1_h1: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 0) && (spi_cfg.delay_byte == 1) &&
+        (spi_cfg.cpol == 1) && (spi_cfg.cpha == 1));
+
+    cfg_m1_d0_p0_h0: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 1) && (spi_cfg.delay_byte == 0) &&
+        (spi_cfg.cpol == 0) && (spi_cfg.cpha == 0));
+    cfg_m1_d0_p0_h1: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 1) && (spi_cfg.delay_byte == 0) &&
+        (spi_cfg.cpol == 0) && (spi_cfg.cpha == 1));
+    cfg_m1_d0_p1_h0: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 1) && (spi_cfg.delay_byte == 0) &&
+        (spi_cfg.cpol == 1) && (spi_cfg.cpha == 0));
+    cfg_m1_d0_p1_h1: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 1) && (spi_cfg.delay_byte == 0) &&
+        (spi_cfg.cpol == 1) && (spi_cfg.cpha == 1));
+
+    cfg_m1_d1_p0_h0: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 1) && (spi_cfg.delay_byte == 1) &&
+        (spi_cfg.cpol == 0) && (spi_cfg.cpha == 0));
+    cfg_m1_d1_p0_h1: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 1) && (spi_cfg.delay_byte == 1) &&
+        (spi_cfg.cpol == 0) && (spi_cfg.cpha == 1));
+    cfg_m1_d1_p1_h0: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 1) && (spi_cfg.delay_byte == 1) &&
+        (spi_cfg.cpol == 1) && (spi_cfg.cpha == 0));
+    cfg_m1_d1_p1_h1: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n &&
+        (spi_cfg.msb_first == 1) && (spi_cfg.delay_byte == 1) &&
+        (spi_cfg.cpol == 1) && (spi_cfg.cpha == 1));
+
+    // Coarse bins for n_delay_byte
+    ndly_0: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n && (spi_cfg.n_delay_byte == 0));
+    ndly_1: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n && (spi_cfg.n_delay_byte == 1));
+    ndly_2_3: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n && (spi_cfg.n_delay_byte inside {[2:3]}));
+    ndly_4_7: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n && (spi_cfg.n_delay_byte inside {[4:7]}));
+    ndly_8_255: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n && (spi_cfg.n_delay_byte inside {[8:255]}));
+
+    // Coarse bins for clk_div
+    clkdiv_5_6: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n && (spi_cfg.clk_div inside {[5:6]}));
+    clkdiv_7_10: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n && (spi_cfg.clk_div inside {[7:10]}));
+    clkdiv_11_20: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n && (spi_cfg.clk_div inside {[11:20]}));
+    clkdiv_21_50: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n && (spi_cfg.clk_div inside {[21:50]}));
+    clkdiv_51_100: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n && (spi_cfg.clk_div inside {[51:100]}));
+    clkdiv_101p: cover property (@(posedge clk) disable iff (!nrst)
+        active_frame && !cs_n && (spi_cfg.clk_div inside {[101:24'hFFFFFF]}));
+
+endinterface
 
 class spi_slave;
 
