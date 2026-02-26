@@ -53,14 +53,13 @@ module axi_s_to_fifos_spi #(
 
 );
 
-    localparam ADDR_STATUS    = 0;
-    localparam ADDR_WRITE     = 1;
-    localparam ADDR_READ      = 2;
-    localparam ADDR_N_BYTE_R  = 3;
-    localparam ADDR_N_BYTE_W  = 4;
-    localparam ADDR_DELAYS    = 5;
-    localparam ADDR_CLK_DIV   = 6;
-    localparam ADDR_CFG       = 7;
+    localparam ADDR_STATUS      = 0;
+    localparam ADDR_WRITE       = 1;
+    localparam ADDR_READ        = 2;
+    localparam ADDR_N_BYTE_W_R  = 3;
+    localparam ADDR_DELAYS      = 4;
+    localparam ADDR_CLK_DIV     = 5;
+    localparam ADDR_CFG         = 6;
 
 
     localparam BYTES        = C_DATA_WIDTH/8;
@@ -72,12 +71,11 @@ module axi_s_to_fifos_spi #(
     logic [31:0]                awaddr_reg;
     logic [C_DATA_WIDTH-1:0]    wdata_reg;
 
-    logic [$clog2(FIFO_DEPTH)-1:0]     n_bytes_to_read;
-    logic [$clog2(FIFO_DEPTH)-1:0]     n_bytes_to_read_reg;
-    logic                              n_bytes_to_read_update;
-    logic [$clog2(FIFO_DEPTH)-1:0]     n_bytes_to_write;
-    logic [$clog2(FIFO_DEPTH)-1:0]     n_bytes_to_write_reg;
-    logic                              n_bytes_to_write_update;
+    logic [FIFO_DEPTH-1:0]     n_bytes_to_read;
+    logic [FIFO_DEPTH-1:0]     n_bytes_to_read_reg;
+    logic                              update_bytes;
+    logic [FIFO_DEPTH-1:0]     n_bytes_to_write;
+    logic [FIFO_DEPTH-1:0]     n_bytes_to_write_reg;
 
     logic full2;
     logic almost_full2;
@@ -212,8 +210,7 @@ module axi_s_to_fifos_spi #(
             write_index_axi <= 0;
             n_bytes_to_write_reg <= 0;
             n_bytes_to_read_reg <= 0;
-            n_bytes_to_write_update <= 0;
-            n_bytes_to_read_update <= 0;
+            update_bytes <= 0;
             delay_byte <= 0;
             n_delay_byte <= 0;
             clk_div <= 0;
@@ -272,12 +269,11 @@ module axi_s_to_fifos_spi #(
                             write_index_axi <= 0;
                         end
                         wrote_axi <= 1;
-                    end else if (awaddr_reg[31:ADDR_LSB] == ADDR_N_BYTE_R) begin
-                        n_bytes_to_read_reg <= wdata_reg;
-                        n_bytes_to_read_update <= 1;
-                    end else if (awaddr_reg[31:ADDR_LSB] == ADDR_N_BYTE_W) begin
-                        n_bytes_to_write_reg <= wdata_reg;
-                        n_bytes_to_write_update <= 1;
+                    end else if (awaddr_reg[31:ADDR_LSB] == ADDR_N_BYTE_W_R) begin
+                        n_bytes_to_read_reg <= wdata_reg[15:0];
+                        n_bytes_to_write_reg <= wdata_reg[31:16];
+                        $display("Received wdata for N_BYTE_W_R: %0d bytes to write, %0d bytes to read", wdata_reg[31:16], wdata_reg[15:0]);
+                        update_bytes <= 1;
                     end else if (awaddr_reg[31:ADDR_LSB] == ADDR_DELAYS) begin
                         delay_byte <= wdata_reg[8];
                         n_delay_byte <= wdata_reg[7:0];
@@ -292,8 +288,7 @@ module axi_s_to_fifos_spi #(
                     bresp   <= 0;
                     if (bready && bvalid) begin
                         bvalid  <= 0;
-                        n_bytes_to_write_update <= 0;
-                        n_bytes_to_read_update <= 0;
+                        update_bytes <= 0;
                         state_w <= IDLE_WRITE;
                     end
                 end
@@ -363,10 +358,8 @@ module axi_s_to_fifos_spi #(
             case (state_spi)
                 IDLE_SPI: begin
                     spi_ena <= 0;
-                    if (n_bytes_to_write_update) begin
+                    if (update_bytes) begin
                         n_bytes_to_write <= n_bytes_to_write_reg;
-                    end
-                    if (n_bytes_to_read_update) begin
                         n_bytes_to_read <= n_bytes_to_read_reg;
                     end
                     if (!spi_busy) begin
