@@ -1,6 +1,5 @@
 module axi_spi #(
-    parameter integer FIFO_DEPTH = 32,
-    parameter integer C_DATA_WIDTH = 32
+    parameter integer FIFO_DEPTH = 32
 )(
     input  logic                     clk,
     input  logic                     nrst,
@@ -11,8 +10,8 @@ module axi_spi #(
     input  logic                     awvalid,
     output logic                     awready,
 
-    input  logic [C_DATA_WIDTH-1:0]  wdata,
-    input  logic [C_DATA_WIDTH/8-1:0] wstrb,
+    input  logic [32-1:0]  wdata,
+    input  logic [32/8-1:0] wstrb,
     input  logic                     wvalid,
     output logic                     wready,
 
@@ -25,7 +24,7 @@ module axi_spi #(
     input  logic                     arvalid,
     output logic                     arready,
 
-    output logic [C_DATA_WIDTH-1:0]  rdata,
+    output logic [32-1:0]  rdata,
     output logic [1:0]               rresp,
     output logic                     rvalid,
     input  logic                     rready,
@@ -38,8 +37,8 @@ module axi_spi #(
 
 );
 
-    logic [C_DATA_WIDTH-1:0] fifo_wdata;
-    logic [C_DATA_WIDTH-1:0] fifo_rdata;
+    logic [32-1:0] fifo_wdata;
+    logic [32-1:0] fifo_rdata;
     logic new_byte;
     logic spi_ena;
     logic system_idle;
@@ -52,7 +51,7 @@ module axi_spi #(
 
     axi_s_to_fifos_spi #(
         .FIFO_DEPTH(FIFO_DEPTH),
-        .C_DATA_WIDTH(C_DATA_WIDTH)
+        .C_DATA_WIDTH(32)
     ) axi_s_to_fifos_spi_i (
         .clk(clk),
         .nrst(nrst),
