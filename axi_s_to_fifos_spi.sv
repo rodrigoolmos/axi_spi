@@ -33,11 +33,11 @@ module axi_s_to_fifos_spi #(
 
     // FIFO write interface
     input logic [C_DATA_WIDTH-1:0]  fifo_wdata,
-    input logic                     fifo_wena,
-
     // FIFO read interface
     output logic [C_DATA_WIDTH-1:0] fifo_rdata,
-    input logic                     fifo_rena,
+
+    input logic                     new_byte,
+
 
     // SPI control signals
     input logic                     spi_busy,
@@ -71,11 +71,11 @@ module axi_s_to_fifos_spi #(
     logic [31:0]                awaddr_reg;
     logic [C_DATA_WIDTH-1:0]    wdata_reg;
 
-    logic [FIFO_DEPTH-1:0]     n_bytes_to_read;
-    logic [FIFO_DEPTH-1:0]     n_bytes_to_read_reg;
-    logic                              update_bytes;
-    logic [FIFO_DEPTH-1:0]     n_bytes_to_write;
-    logic [FIFO_DEPTH-1:0]     n_bytes_to_write_reg;
+    logic [15:0]     n_bytes_to_read;
+    logic [15:0]     n_bytes_to_read_reg;
+    logic            update_bytes;
+    logic [15:0]     n_bytes_to_write;
+    logic [15:0]     n_bytes_to_write_reg;
 
     logic full2;
     logic almost_full2;
@@ -96,6 +96,10 @@ module axi_s_to_fifos_spi #(
     logic [INDEX_W-1:0] write_index_axi, read_index_axi;
     logic [INDEX_W-1:0] write_index_fifo, read_index_fifo;
     logic [INDEX_W:0]   size_fifo1, size_fifo2;
+
+    logic                     fifo_wena;
+    logic                     fifo_rena;
+
 
     typedef enum logic {
         IDLE_READ,
@@ -128,7 +132,7 @@ module axi_s_to_fifos_spi #(
                     rvalid  <= 1;
                     rresp   <= 0;
 
-                    if (araddr_reg[31:ADDR_LSB] == ADDR_STATUS) begin
+                    if (araddr_reg[31:ADDR_LSB] == ADDR_STATUS && !rvalid) begin
                         rdata   <= {27'b0,
                                     spi_busy, 
                                     full2,
@@ -262,6 +266,8 @@ module axi_s_to_fifos_spi #(
                 end
 
                 RESP: begin
+                    // SW/driver contract: write ADDR_N_BYTE_W_R, ADDR_CFG, ADDR_DELAYS and
+                    // ADDR_CLK_DIV only when spi_busy == 0 (idle peripheral).
                     if (awaddr_reg[31:ADDR_LSB] == ADDR_WRITE && !wrote_axi && !full2) begin
                         reg_write[write_index_axi] <= wdata_reg;
                         write_index_axi <= write_index_axi + 1;
@@ -272,7 +278,6 @@ module axi_s_to_fifos_spi #(
                     end else if (awaddr_reg[31:ADDR_LSB] == ADDR_N_BYTE_W_R) begin
                         n_bytes_to_read_reg <= wdata_reg[15:0];
                         n_bytes_to_write_reg <= wdata_reg[31:16];
-                        $display("Received wdata for N_BYTE_W_R: %0d bytes to write, %0d bytes to read", wdata_reg[31:16], wdata_reg[15:0]);
                         update_bytes <= 1;
                     end else if (awaddr_reg[31:ADDR_LSB] == ADDR_DELAYS) begin
                         delay_byte <= wdata_reg[8];
@@ -407,5 +412,8 @@ module axi_s_to_fifos_spi #(
             endcase
         end
     end
+
+    assign fifo_wena = new_byte && (state_spi == RECEIVING_SPI);
+    assign fifo_rena = new_byte && (state_spi == SENDING_SPI);
 
 endmodule

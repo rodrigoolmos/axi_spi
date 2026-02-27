@@ -232,16 +232,14 @@ class spi_slave;
             if (sample_pos) @(posedge spi_s_if.sclk);
             else            @(negedge spi_s_if.sclk);
         end
-
-        $display("Sent byte: 0b%08b", data);
     endtask
 
 
 
-    task write();
+    task write(int n_bytes = 999999);
         wait(!spi_s_if.cs_n);
         fork
-            forever begin
+            for (int i = 0; i < n_bytes; i++) begin
                 if (buffer_read.size() > 0) write_byte();
                 else wait (buffer_read.size() > 0);
             end 
@@ -264,14 +262,15 @@ class spi_slave;
                 
             data[spi_cfg.msb_first ? 7-i : i] = spi_s_if.mosi; 
         end
-        $display("Received byte: 0b%08b", data);
         buffer_read.push_back(data);
     endtask
 
-    task read();
+    task read(int n_bytes = 999999);
         wait(!spi_s_if.cs_n);
         fork
-            forever read_byte();
+            for (int i = 0; i < n_bytes; i++) begin
+                read_byte();
+            end
             wait(spi_s_if.cs_n);
         join_any
 

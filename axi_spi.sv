@@ -71,6 +71,7 @@ module axi_spi #(
         .bvalid(bvalid),
         .bready(bready),
 
+        .araddr(araddr),
         .arprot(arprot),
         .arvalid(arvalid),
         .arready(arready),
@@ -81,10 +82,8 @@ module axi_spi #(
         .rready(rready),
 
         .fifo_wdata(fifo_wdata),
-        .fifo_wena(new_byte),
-
         .fifo_rdata(fifo_rdata),
-        .fifo_rena(new_byte),
+        .new_byte(new_byte),
 
         .spi_busy(!system_idle),
         .spi_ena(spi_ena),
